@@ -17,7 +17,7 @@
       --radius: 8px;
     }
 
-    /* Absolute lock against horizontal scrolling */
+    /* Prevent page horizontal scroll overflow */
     html, body {
       width: 100%;
       max-width: 100%;
@@ -76,7 +76,7 @@
     .btn-danger { background-color: #fee2e2; color: #dc2626; }
     .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 
-    /* Category Tabs Container */
+    /* Category Tabs */
     .tabs-container { 
       display: flex; 
       gap: 0.4rem; 
@@ -154,7 +154,7 @@
       </div>
     </header>
 
-    <!-- Admin Input Form -->
+    <!-- Admin Form -->
     <div class="card hidden" id="adminFormCard">
       <h2 class="card-title" id="formTitle">Add New Link</h2>
       <form id="urlForm">
@@ -197,7 +197,7 @@
       </form>
     </div>
 
-    <!-- Directory Controls & Data Display -->
+    <!-- Directory Display Container -->
     <div class="card">
       <div class="tabs-container" id="tabsContainer"></div>
 
@@ -263,8 +263,12 @@
     let currentView = window.innerWidth >= 768 ? 'table' : 'cards';
 
     document.addEventListener('DOMContentLoaded', async () => {
-      const { data: { session } } = await db.auth.getSession();
-      updateAuthUI(session?.user || null);
+      try {
+        const { data: { session } } = await db.auth.getSession();
+        updateAuthUI(session?.user || null);
+      } catch (err) {
+        console.warn('Auth check error:', err);
+      }
 
       db.auth.onAuthStateChange(async (event, session) => {
         updateAuthUI(session?.user || null);
@@ -287,13 +291,13 @@
         loginForm.classList.add('hidden');
         userInfo.classList.remove('hidden');
         adminFormCard.classList.remove('hidden');
-        actionsHeader.classList.remove('hidden');
+        if (actionsHeader) actionsHeader.classList.remove('hidden');
         userEmailBadge.textContent = currentUser.email;
       } else {
         loginForm.classList.remove('hidden');
         userInfo.classList.add('hidden');
         adminFormCard.classList.add('hidden');
-        actionsHeader.classList.add('hidden');
+        if (actionsHeader) actionsHeader.classList.add('hidden');
         userEmailBadge.textContent = '';
       }
       renderDisplay();
@@ -321,7 +325,6 @@
 
       if (error) {
         console.error('Error fetching data:', error);
-        return;
       }
 
       entries = data || [];
@@ -331,6 +334,8 @@
     }
 
     function populateFormDropdowns() {
+      if (!categorySelect || !authorSelect || !typeSelect) return;
+
       const categories = [...new Set(entries.map(e => e.category).filter(Boolean))].sort();
       const authors = [...new Set(entries.map(e => e.author).filter(Boolean))].sort();
       const types = [...new Set(entries.map(e => e.type).filter(Boolean))].sort();
@@ -348,6 +353,7 @@
     }
 
     function fillSelectOptions(selectElement, optionsList, label) {
+      if (!selectElement) return;
       const currentVal = selectElement.value;
       let html = `<option value="">Select ${label}</option>`;
       optionsList.forEach(item => {
@@ -355,11 +361,12 @@
       });
       html += `<option value="__NEW__">+ Add New ${label}...</option>`;
       selectElement.innerHTML = html;
-      selectElement.value = currentVal;
+      if (currentVal) selectElement.value = currentVal;
     }
 
     function setupDropdownListeners() {
       [categorySelect, authorSelect, typeSelect].forEach(select => {
+        if (!select) return;
         select.addEventListener('change', (e) => {
           if (e.target.value === '__NEW__') {
             const label = e.target.id.replace('Select', '');
@@ -397,9 +404,9 @@
       const payload = {
         title: document.getElementById('title').value,
         url: formatUrl(rawUrl),
-        category: categorySelect.value || 'Uncategorized',
-        author: authorSelect.value || 'N/A',
-        type: typeSelect.value || 'Link',
+        category: categorySelect ? (categorySelect.value || 'Uncategorized') : 'Uncategorized',
+        author: authorSelect ? (authorSelect.value || 'N/A') : 'N/A',
+        type: typeSelect ? (typeSelect.value || 'Link') : 'Link',
         tags: document.getElementById('tags').value || '',
         comments: document.getElementById('comments').value || ''
       };
@@ -437,7 +444,7 @@
     }
 
     function setDropdownVal(selectElement, val) {
-      if (!val) { selectElement.value = ''; return; }
+      if (!selectElement || !val) { if (selectElement) selectElement.value = ''; return; }
       const exists = Array.from(selectElement.options).some(opt => opt.value === val);
       if (!exists) {
         const opt = document.createElement('option');
@@ -460,9 +467,9 @@
     function resetForm() {
       form.reset();
       document.getElementById('linkId').value = '';
-      categorySelect.value = '';
-      authorSelect.value = '';
-      typeSelect.value = '';
+      if (categorySelect) categorySelect.value = '';
+      if (authorSelect) authorSelect.value = '';
+      if (typeSelect) typeSelect.value = '';
       document.getElementById('formTitle').textContent = 'Add New Link';
       document.getElementById('saveBtn').textContent = 'Save Link';
     }
@@ -527,12 +534,12 @@
           <div>
             <div class="record-header">
               <a href="${escapeHtml(item.url)}" target="_blank" class="record-title">${escapeHtml(item.title)} ↗</a>
-              <span class="badge">${escapeHtml(item.category)}</span>
+              <span class="badge">${escapeHtml(item.category || 'Uncategorized')}</span>
             </div>
             
             <div class="record-meta" style="margin-top: 0.5rem;">
-              <span>By ${escapeHtml(item.author)}</span> • 
-              <span>${escapeHtml(item.type)}</span> • 
+              <span>By ${escapeHtml(item.author || 'N/A')}</span> • 
+              <span>${escapeHtml(item.type || 'Link')}</span> • 
               <span>${new Date(item.created_at).toLocaleDateString()}</span>
             </div>
 
@@ -553,10 +560,10 @@
       tableBody.innerHTML = filtered.map(item => `
         <tr>
           <td><a href="${escapeHtml(item.url)}" target="_blank" class="record-title">${escapeHtml(item.title)} ↗</a></td>
-          <td><span class="badge">${escapeHtml(item.category)}</span></td>
-          <td>${escapeHtml(item.author)}</td>
-          <td>${escapeHtml(item.type)}</td>
-          <td>${escapeHtml(item.comments)}</td>
+          <td><span class="badge">${escapeHtml(item.category || 'Uncategorized')}</span></td>
+          <td>${escapeHtml(item.author || 'N/A')}</td>
+          <td>${escapeHtml(item.type || 'Link')}</td>
+          <td>${escapeHtml(item.comments || '')}</td>
           <td><small>${new Date(item.created_at).toLocaleDateString()}</small></td>
           ${currentUser ? `
             <td class="record-actions">
