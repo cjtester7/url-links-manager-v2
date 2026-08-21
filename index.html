@@ -64,7 +64,7 @@
     .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
     .form-group.full-width { grid-column: 1 / -1; }
     label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
-    input, select, textarea { padding: 0.55rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 0.9rem; outline: none; width: 100%; }
+    input, select, textarea { padding: 0.55rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 0.9rem; outline: none; width: 100%; background: #fff; }
     textarea { resize: vertical; min-height: 60px; }
     
     .btn-group { margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
@@ -169,16 +169,16 @@
             <input type="text" id="url" required placeholder="example.com or https://example.com" />
           </div>
           <div class="form-group">
-            <label for="category">Category</label>
-            <input type="text" id="category" placeholder="e.g., Marketing, Real Estate" />
+            <label for="categorySelect">Category</label>
+            <select id="categorySelect"></select>
           </div>
           <div class="form-group">
-            <label for="author">Author</label>
-            <input type="text" id="author" placeholder="e.g., CJ" />
+            <label for="authorSelect">Author</label>
+            <select id="authorSelect"></select>
           </div>
           <div class="form-group">
-            <label for="type">Type / Format</label>
-            <input type="text" id="type" placeholder="e.g., Video, Article" />
+            <label for="typeSelect">Type / Format</label>
+            <select id="typeSelect"></select>
           </div>
           <div class="form-group">
             <label for="tags">Tags</label>
@@ -232,7 +232,8 @@
 
   <script>
     const SUPABASE_URL = 'https://eawbipagcuiqscpxibop.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd2JpcGFnY3VpcXNjcHhpYm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzQ5MTAsImV4cCI6MjEwMjg1MDkxMH0.-q_bMzA9W0XrS-OvnyuXlO74E4kYqDIpyN_eoV5BL-s'; // Replace with your anon key
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd2JpcGFnY3VpcXNjcHhpYm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzQ5MTAsImV4cCI6MjEwMjg1MDkxMH0.-q_bMzA9W0XrS-OvnyuXlO74E4kYqDIpyN_eoV5BL-s
+'; // Replace with your anon key
 
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -251,6 +252,10 @@
     const tabsContainer = document.getElementById('tabsContainer');
     const exportBtn = document.getElementById('exportBtn');
     const viewToggleBtn = document.getElementById('viewToggleBtn');
+
+    const categorySelect = document.getElementById('categorySelect');
+    const authorSelect = document.getElementById('authorSelect');
+    const typeSelect = document.getElementById('typeSelect');
 
     let entries = [];
     let selectedCategory = 'All';
@@ -272,6 +277,7 @@
         }
       });
 
+      setupDropdownListeners();
       await fetchEntries();
     });
 
@@ -320,7 +326,57 @@
 
       entries = data || [];
       renderTabs();
+      populateFormDropdowns();
       renderDisplay();
+    }
+
+    function populateFormDropdowns() {
+      const categories = [...new Set(entries.map(e => e.category).filter(Boolean))].sort();
+      const authors = [...new Set(entries.map(e => e.author).filter(Boolean))].sort();
+      const types = [...new Set(entries.map(e => e.type).filter(Boolean))].sort();
+
+      const defaultCategories = ['General', 'Marketing', 'Real Estate', 'Development', 'Reference'];
+      const defaultTypes = ['Link', 'Article', 'Video', 'Tool', 'Document'];
+
+      const finalCategories = [...new Set([...defaultCategories, ...categories])].sort();
+      const finalAuthors = authors.length > 0 ? authors : ['CJ', 'N/A'];
+      const finalTypes = [...new Set([...defaultTypes, ...types])].sort();
+
+      fillSelectOptions(categorySelect, finalCategories, 'Category');
+      fillSelectOptions(authorSelect, finalAuthors, 'Author');
+      fillSelectOptions(typeSelect, finalTypes, 'Type');
+    }
+
+    function fillSelectOptions(selectElement, optionsList, label) {
+      const currentVal = selectElement.value;
+      let html = `<option value="">Select ${label}</option>`;
+      optionsList.forEach(item => {
+        html += `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`;
+      });
+      html += `<option value="__NEW__">+ Add New ${label}...</option>`;
+      selectElement.innerHTML = html;
+      selectElement.value = currentVal;
+    }
+
+    function setupDropdownListeners() {
+      [categorySelect, authorSelect, typeSelect].forEach(select => {
+        select.addEventListener('change', (e) => {
+          if (e.target.value === '__NEW__') {
+            const label = e.target.id.replace('Select', '');
+            const newVal = prompt(`Enter new ${label}:`);
+            if (newVal && newVal.trim()) {
+              const cleaned = newVal.trim();
+              const opt = document.createElement('option');
+              opt.value = cleaned;
+              opt.textContent = cleaned;
+              e.target.insertBefore(opt, e.target.lastElementChild);
+              e.target.value = cleaned;
+            } else {
+              e.target.value = '';
+            }
+          }
+        });
+      });
     }
 
     function formatUrl(urlStr) {
@@ -341,9 +397,9 @@
       const payload = {
         title: document.getElementById('title').value,
         url: formatUrl(rawUrl),
-        category: document.getElementById('category').value || 'Uncategorized',
-        author: document.getElementById('author').value || 'N/A',
-        type: document.getElementById('type').value || 'Link',
+        category: categorySelect.value || 'Uncategorized',
+        author: authorSelect.value || 'N/A',
+        type: typeSelect.value || 'Link',
         tags: document.getElementById('tags').value || '',
         comments: document.getElementById('comments').value || ''
       };
@@ -367,15 +423,29 @@
       document.getElementById('linkId').value = item.id;
       document.getElementById('title').value = item.title;
       document.getElementById('url').value = item.url;
-      document.getElementById('category').value = item.category;
-      document.getElementById('author').value = item.author;
-      document.getElementById('type').value = item.type;
+      
+      setDropdownVal(categorySelect, item.category);
+      setDropdownVal(authorSelect, item.author);
+      setDropdownVal(typeSelect, item.type);
+
       document.getElementById('tags').value = item.tags;
       document.getElementById('comments').value = item.comments;
 
       document.getElementById('formTitle').textContent = 'Edit Link';
       document.getElementById('saveBtn').textContent = 'Update Link';
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function setDropdownVal(selectElement, val) {
+      if (!val) { selectElement.value = ''; return; }
+      const exists = Array.from(selectElement.options).some(opt => opt.value === val);
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        selectElement.insertBefore(opt, selectElement.lastElementChild);
+      }
+      selectElement.value = val;
     }
 
     async function deleteEntry(id) {
@@ -390,6 +460,9 @@
     function resetForm() {
       form.reset();
       document.getElementById('linkId').value = '';
+      categorySelect.value = '';
+      authorSelect.value = '';
+      typeSelect.value = '';
       document.getElementById('formTitle').textContent = 'Add New Link';
       document.getElementById('saveBtn').textContent = 'Save Link';
     }
