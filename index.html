@@ -17,7 +17,6 @@
       --radius: 8px;
     }
 
-    /* Prevent page horizontal scroll overflow */
     html, body {
       width: 100%;
       max-width: 100%;
@@ -76,7 +75,7 @@
     .btn-danger { background-color: #fee2e2; color: #dc2626; }
     .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 
-    /* Category Tabs */
+    /* Category Tabs Container */
     .tabs-container { 
       display: flex; 
       gap: 0.4rem; 
@@ -154,7 +153,7 @@
       </div>
     </header>
 
-    <!-- Admin Form -->
+    <!-- Admin Input Form -->
     <div class="card hidden" id="adminFormCard">
       <h2 class="card-title" id="formTitle">Add New Link</h2>
       <form id="urlForm">
@@ -168,18 +167,24 @@
             <label for="url">URL *</label>
             <input type="text" id="url" required placeholder="example.com or https://example.com" />
           </div>
+          
+          <!-- Dropdown via DataLists -->
           <div class="form-group">
-            <label for="categorySelect">Category</label>
-            <select id="categorySelect"></select>
+            <label for="category">Category</label>
+            <input type="text" id="category" list="categoryOptions" placeholder="Select or type category..." />
+            <datalist id="categoryOptions"></datalist>
           </div>
           <div class="form-group">
-            <label for="authorSelect">Author</label>
-            <select id="authorSelect"></select>
+            <label for="author">Author</label>
+            <input type="text" id="author" list="authorOptions" placeholder="Select or type author..." />
+            <datalist id="authorOptions"></datalist>
           </div>
           <div class="form-group">
-            <label for="typeSelect">Type / Format</label>
-            <select id="typeSelect"></select>
+            <label for="type">Type / Format</label>
+            <input type="text" id="type" list="typeOptions" placeholder="Select or type format..." />
+            <datalist id="typeOptions"></datalist>
           </div>
+
           <div class="form-group">
             <label for="tags">Tags</label>
             <input type="text" id="tags" placeholder="e.g., reference, tutorial" />
@@ -197,7 +202,7 @@
       </form>
     </div>
 
-    <!-- Directory Display Container -->
+    <!-- Directory Controls & Data Display -->
     <div class="card">
       <div class="tabs-container" id="tabsContainer"></div>
 
@@ -253,10 +258,6 @@
     const exportBtn = document.getElementById('exportBtn');
     const viewToggleBtn = document.getElementById('viewToggleBtn');
 
-    const categorySelect = document.getElementById('categorySelect');
-    const authorSelect = document.getElementById('authorSelect');
-    const typeSelect = document.getElementById('typeSelect');
-
     let entries = [];
     let selectedCategory = 'All';
     let currentUser = null;
@@ -267,7 +268,7 @@
         const { data: { session } } = await db.auth.getSession();
         updateAuthUI(session?.user || null);
       } catch (err) {
-        console.warn('Auth check error:', err);
+        console.warn('Session error:', err);
       }
 
       db.auth.onAuthStateChange(async (event, session) => {
@@ -281,7 +282,6 @@
         }
       });
 
-      setupDropdownListeners();
       await fetchEntries();
     });
 
@@ -291,13 +291,13 @@
         loginForm.classList.add('hidden');
         userInfo.classList.remove('hidden');
         adminFormCard.classList.remove('hidden');
-        if (actionsHeader) actionsHeader.classList.remove('hidden');
+        actionsHeader.classList.remove('hidden');
         userEmailBadge.textContent = currentUser.email;
       } else {
         loginForm.classList.remove('hidden');
         userInfo.classList.add('hidden');
         adminFormCard.classList.add('hidden');
-        if (actionsHeader) actionsHeader.classList.add('hidden');
+        actionsHeader.classList.add('hidden');
         userEmailBadge.textContent = '';
       }
       renderDisplay();
@@ -329,13 +329,11 @@
 
       entries = data || [];
       renderTabs();
-      populateFormDropdowns();
+      populateDropdownLists();
       renderDisplay();
     }
 
-    function populateFormDropdowns() {
-      if (!categorySelect || !authorSelect || !typeSelect) return;
-
+    function populateDropdownLists() {
       const categories = [...new Set(entries.map(e => e.category).filter(Boolean))].sort();
       const authors = [...new Set(entries.map(e => e.author).filter(Boolean))].sort();
       const types = [...new Set(entries.map(e => e.type).filter(Boolean))].sort();
@@ -344,46 +342,12 @@
       const defaultTypes = ['Link', 'Article', 'Video', 'Tool', 'Document'];
 
       const finalCategories = [...new Set([...defaultCategories, ...categories])].sort();
-      const finalAuthors = authors.length > 0 ? authors : ['CJ', 'N/A'];
+      const finalAuthors = authors.length > 0 ? authors : ['CJ'];
       const finalTypes = [...new Set([...defaultTypes, ...types])].sort();
 
-      fillSelectOptions(categorySelect, finalCategories, 'Category');
-      fillSelectOptions(authorSelect, finalAuthors, 'Author');
-      fillSelectOptions(typeSelect, finalTypes, 'Type');
-    }
-
-    function fillSelectOptions(selectElement, optionsList, label) {
-      if (!selectElement) return;
-      const currentVal = selectElement.value;
-      let html = `<option value="">Select ${label}</option>`;
-      optionsList.forEach(item => {
-        html += `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`;
-      });
-      html += `<option value="__NEW__">+ Add New ${label}...</option>`;
-      selectElement.innerHTML = html;
-      if (currentVal) selectElement.value = currentVal;
-    }
-
-    function setupDropdownListeners() {
-      [categorySelect, authorSelect, typeSelect].forEach(select => {
-        if (!select) return;
-        select.addEventListener('change', (e) => {
-          if (e.target.value === '__NEW__') {
-            const label = e.target.id.replace('Select', '');
-            const newVal = prompt(`Enter new ${label}:`);
-            if (newVal && newVal.trim()) {
-              const cleaned = newVal.trim();
-              const opt = document.createElement('option');
-              opt.value = cleaned;
-              opt.textContent = cleaned;
-              e.target.insertBefore(opt, e.target.lastElementChild);
-              e.target.value = cleaned;
-            } else {
-              e.target.value = '';
-            }
-          }
-        });
-      });
+      document.getElementById('categoryOptions').innerHTML = finalCategories.map(c => `<option value="${escapeHtml(c)}">`).join('');
+      document.getElementById('authorOptions').innerHTML = finalAuthors.map(a => `<option value="${escapeHtml(a)}">`).join('');
+      document.getElementById('typeOptions').innerHTML = finalTypes.map(t => `<option value="${escapeHtml(t)}">`).join('');
     }
 
     function formatUrl(urlStr) {
@@ -404,9 +368,9 @@
       const payload = {
         title: document.getElementById('title').value,
         url: formatUrl(rawUrl),
-        category: categorySelect ? (categorySelect.value || 'Uncategorized') : 'Uncategorized',
-        author: authorSelect ? (authorSelect.value || 'N/A') : 'N/A',
-        type: typeSelect ? (typeSelect.value || 'Link') : 'Link',
+        category: document.getElementById('category').value || 'Uncategorized',
+        author: document.getElementById('author').value || 'N/A',
+        type: document.getElementById('type').value || 'Link',
         tags: document.getElementById('tags').value || '',
         comments: document.getElementById('comments').value || ''
       };
@@ -430,29 +394,15 @@
       document.getElementById('linkId').value = item.id;
       document.getElementById('title').value = item.title;
       document.getElementById('url').value = item.url;
-      
-      setDropdownVal(categorySelect, item.category);
-      setDropdownVal(authorSelect, item.author);
-      setDropdownVal(typeSelect, item.type);
-
-      document.getElementById('tags').value = item.tags;
-      document.getElementById('comments').value = item.comments;
+      document.getElementById('category').value = item.category || '';
+      document.getElementById('author').value = item.author || '';
+      document.getElementById('type').value = item.type || '';
+      document.getElementById('tags').value = item.tags || '';
+      document.getElementById('comments').value = item.comments || '';
 
       document.getElementById('formTitle').textContent = 'Edit Link';
       document.getElementById('saveBtn').textContent = 'Update Link';
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function setDropdownVal(selectElement, val) {
-      if (!selectElement || !val) { if (selectElement) selectElement.value = ''; return; }
-      const exists = Array.from(selectElement.options).some(opt => opt.value === val);
-      if (!exists) {
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = val;
-        selectElement.insertBefore(opt, selectElement.lastElementChild);
-      }
-      selectElement.value = val;
     }
 
     async function deleteEntry(id) {
@@ -467,9 +417,6 @@
     function resetForm() {
       form.reset();
       document.getElementById('linkId').value = '';
-      if (categorySelect) categorySelect.value = '';
-      if (authorSelect) authorSelect.value = '';
-      if (typeSelect) typeSelect.value = '';
       document.getElementById('formTitle').textContent = 'Add New Link';
       document.getElementById('saveBtn').textContent = 'Save Link';
     }
