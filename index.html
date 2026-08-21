@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>URL Links Manager</title>
+  <!-- Load Supabase CDN once -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
@@ -139,9 +140,12 @@
   </div>
 
   <script>
+    // Supabase Configuration
     const SUPABASE_URL = 'https://eawbipagcuiqscpxibop.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd2JpcGFnY3VpcXNjcHhpYm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzQ5MTAsImV4cCI6MjEwMjg1MDkxMH0.-q_bMzA9W0XrS-OvnyuXlO74E4kYqDIpyN_eoV5BL-s';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd2JpcGFnY3VpcXNjcHhpYm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzQ5MTAsImV4cCI6MjEwMjg1MDkxMH0.-q_bMzA9W0XrS-OvnyuXlO74E4kYqDIpyN_eoV5BL-s'; // Replace with your real anon key
+
+    // Initialized as 'db' to prevent redeclaration errors with window.supabase
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const form = document.getElementById('urlForm');
     const searchInput = document.getElementById('searchInput');
@@ -157,7 +161,7 @@
     });
 
     async function fetchEntries() {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('links')
         .select('*')
         .order('created_at', { ascending: false });
@@ -167,7 +171,7 @@
         return;
       }
 
-      entries = data;
+      entries = data || [];
       renderTabs();
       renderTable();
     }
@@ -188,11 +192,11 @@
 
       if (id) {
         // UPDATE existing record
-        const { error } = await supabase.from('links').update(payload).eq('id', id);
+        const { error } = await db.from('links').update(payload).eq('id', id);
         if (error) return alert('Failed to update: ' + error.message);
       } else {
         // INSERT new record
-        const { error } = await supabase.from('links').insert([payload]);
+        const { error } = await db.from('links').insert([payload]);
         if (error) return alert('Failed to save: ' + error.message);
       }
 
@@ -220,7 +224,7 @@
 
     async function deleteEntry(id) {
       if (confirm('Are you sure you want to delete this link?')) {
-        const { error } = await supabase.from('links').delete().eq('id', id);
+        const { error } = await db.from('links').delete().eq('id', id);
         if (error) return alert('Failed to delete: ' + error.message);
         await fetchEntries();
       }
