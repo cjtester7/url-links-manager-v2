@@ -17,7 +17,20 @@
       --radius: 8px;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    /* Prevent horizontal viewport overflow */
+    html, body {
+      max-width: 100vw;
+      overflow-x: hidden;
+    }
+
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 100%;
+    }
+
     body { background-color: var(--bg-color); color: var(--text-main); padding: 1rem; line-height: 1.5; }
     .container { max-width: 1200px; margin: 0 auto; }
     
@@ -37,6 +50,7 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
       margin-bottom: 1.5rem; 
       border: 1px solid var(--border-color); 
+      word-break: break-word;
     }
     .card-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem; }
     
@@ -48,7 +62,7 @@
     .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
     .form-group.full-width { grid-column: 1 / -1; }
     label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
-    input, select, textarea { padding: 0.55rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 0.9rem; outline: none; }
+    input, select, textarea { padding: 0.55rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 0.9rem; outline: none; width: 100%; }
     textarea { resize: vertical; min-height: 60px; }
     
     .btn-group { margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
@@ -60,15 +74,25 @@
     .btn-danger { background-color: #fee2e2; color: #dc2626; }
     .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 
-    .tabs-container { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid var(--border-color); }
+    /* Contained horizontal scroll for tabs */
+    .tabs-container { 
+      display: flex; 
+      gap: 0.4rem; 
+      overflow-x: auto; 
+      max-width: 100%;
+      padding-bottom: 0.5rem; 
+      margin-bottom: 1rem; 
+      border-bottom: 2px solid var(--border-color); 
+      -webkit-overflow-scrolling: touch;
+    }
     .tab-btn { padding: 0.4rem 0.8rem; border: none; background: none; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: 4px; white-space: nowrap; }
     .tab-btn.active { background-color: var(--primary); color: var(--text-main); }
 
     .controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem; }
     .search-input { width: 100%; max-width: 100%; }
 
-    /* Mobile Record Card Grid */
-    .records-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    /* Responsive Mobile Grid */
+    .records-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; width: 100%; }
     .record-card { 
       background: var(--card-bg); 
       border: 1px solid var(--border-color); 
@@ -78,6 +102,7 @@
       flex-direction: column; 
       justify-content: space-between;
       gap: 0.75rem;
+      word-break: break-word;
     }
     .record-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
     .record-title { font-size: 1rem; font-weight: 600; color: #2563eb; text-decoration: none; line-height: 1.3; }
@@ -130,7 +155,7 @@
           </div>
           <div class="form-group full-width">
             <label for="url">URL *</label>
-            <input type="url" id="url" required placeholder="https://example.com" />
+            <input type="text" id="url" required placeholder="example.com or https://example.com" />
           </div>
           <div class="form-group">
             <label for="category">Category</label>
@@ -280,14 +305,25 @@
       renderCards();
     }
 
+    // Auto-formats URL string if missing protocol
+    function formatUrl(urlStr) {
+      let cleaned = (urlStr || '').trim();
+      if (cleaned && !cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+        return 'https://' + cleaned;
+      }
+      return cleaned;
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!currentUser) return alert('You must be logged in.');
 
       const id = document.getElementById('linkId').value;
+      const rawUrl = document.getElementById('url').value;
+
       const payload = {
         title: document.getElementById('title').value,
-        url: document.getElementById('url').value,
+        url: formatUrl(rawUrl),
         category: document.getElementById('category').value || 'Uncategorized',
         author: document.getElementById('author').value || 'N/A',
         type: document.getElementById('type').value || 'Link',
@@ -379,7 +415,6 @@
         <div class="record-card">
           <div>
             <div class="record-header">
-              <!-- Title is hyperlinked -->
               <a href="${escapeHtml(item.url)}" target="_blank" class="record-title">${escapeHtml(item.title)} ↗</a>
               <span class="badge">${escapeHtml(item.category)}</span>
             </div>
