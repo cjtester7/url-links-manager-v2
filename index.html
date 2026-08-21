@@ -3,15 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>URL Links Manager</title>
-  <!-- Load Supabase CDN once -->
+  <title>URL Links Manager (Secured)</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --bg-color: #f8fafc;
       --card-bg: #ffffff;
       --primary: #05edf5;
-      --primary-dark: #0081a7;
       --accent-green: #5eebbe;
       --text-main: #0f172a;
       --text-muted: #64748b;
@@ -22,11 +20,14 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem; line-height: 1.5; }
     .container { max-width: 1200px; margin: 0 auto; }
-    header { margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
+    header { margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
     
     .card { background: var(--card-bg); border-radius: var(--radius); padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 2rem; border: 1px solid var(--border-color); }
     .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
     
+    .auth-bar { display: flex; gap: 0.5rem; align-items: center; }
+    .auth-bar input { padding: 0.4rem 0.6rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 0.85rem; }
+
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
     .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
     .form-group.full-width { grid-column: 1 / -1; }
@@ -41,8 +42,8 @@
     .btn-outline { background: transparent; border: 1px solid var(--border-color); }
     .btn-warning { background-color: #fef08a; color: #854d0e; padding: 0.25rem 0.5rem; font-size: 0.8rem; }
     .btn-danger { background-color: #fee2e2; color: #dc2626; padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+    .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
 
-    /* Category Tabs */
     .tabs-container { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid var(--border-color); }
     .tab-btn { padding: 0.5rem 1rem; border: none; background: none; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: 4px; white-space: nowrap; }
     .tab-btn.active { background-color: var(--primary); color: var(--text-main); }
@@ -56,6 +57,7 @@
     .badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background-color: #e0f2fe; color: #0369a1; }
     a.link { color: #2563eb; text-decoration: none; word-break: break-all; }
     .actions-cell { display: flex; gap: 0.5rem; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -63,11 +65,24 @@
   <div class="container">
     <header>
       <h1>🔗 Link Directory App</h1>
-      <button class="btn btn-outline" id="exportBtn">Export to CSV</button>
+      
+      <!-- Authentication Controls -->
+      <div class="auth-bar">
+        <form id="loginForm" style="display: flex; gap: 0.5rem;">
+          <input type="email" id="authEmail" placeholder="Admin Email" required />
+          <input type="password" id="authPassword" placeholder="Password" required />
+          <button type="submit" class="btn btn-primary btn-sm">Login</button>
+        </form>
+        
+        <div id="userInfo" class="hidden" style="display: flex; gap: 0.5rem; align-items: center;">
+          <span id="userEmailBadge" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+          <button id="logoutBtn" class="btn btn-secondary btn-sm">Logout</button>
+        </div>
+      </div>
     </header>
 
-    <!-- Data Input Form -->
-    <div class="card">
+    <!-- Data Input Form (Hidden unless logged in) -->
+    <div class="card hidden" id="adminFormCard">
       <h2 class="card-title" id="formTitle">Add New URL Entry</h2>
       <form id="urlForm">
         <input type="hidden" id="linkId" />
@@ -111,13 +126,11 @@
 
     <!-- Data Directory & Search -->
     <div class="card">
-      <!-- Category Tabs -->
-      <div class="tabs-container" id="tabsContainer">
-        <!-- Tabs populate dynamically -->
-      </div>
+      <div class="tabs-container" id="tabsContainer"></div>
 
       <div class="controls">
         <input type="text" id="searchInput" class="search-input" placeholder="Search entries..." />
+        <button class="btn btn-outline btn-sm" id="exportBtn">Export CSV</button>
       </div>
 
       <div class="table-container">
@@ -130,7 +143,7 @@
               <th>Type</th>
               <th>Comments</th>
               <th>Date Added</th>
-              <th>Actions</th>
+              <th id="actionsHeader" class="hidden">Actions</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -140,12 +153,17 @@
   </div>
 
   <script>
-    // Supabase Configuration
     const SUPABASE_URL = 'https://eawbipagcuiqscpxibop.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd2JpcGFnY3VpcXNjcHhpYm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzQ5MTAsImV4cCI6MjEwMjg1MDkxMH0.-q_bMzA9W0XrS-OvnyuXlO74E4kYqDIpyN_eoV5BL-s'; // Replace with your real anon key
 
-    // Initialized as 'db' to prevent redeclaration errors with window.supabase
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const loginForm = document.getElementById('loginForm');
+    const userInfo = document.getElementById('userInfo');
+    const userEmailBadge = document.getElementById('userEmailBadge');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const adminFormCard = document.getElementById('adminFormCard');
+    const actionsHeader = document.getElementById('actionsHeader');
 
     const form = document.getElementById('urlForm');
     const searchInput = document.getElementById('searchInput');
@@ -155,9 +173,51 @@
 
     let entries = [];
     let selectedCategory = 'All';
+    let currentUser = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
+      // Check active auth session
+      const { data: { session } } = await db.auth.getSession();
+      updateAuthUI(session?.user || null);
+
+      // Listen for auth state changes
+      db.auth.onAuthStateChange((_event, session) => {
+        updateAuthUI(session?.user || null);
+      });
+
       await fetchEntries();
+    });
+
+    function updateAuthUI(user) {
+      currentUser = user;
+      if (currentUser) {
+        loginForm.classList.add('hidden');
+        userInfo.classList.remove('hidden');
+        adminFormCard.classList.remove('hidden');
+        actionsHeader.classList.remove('hidden');
+        userEmailBadge.textContent = currentUser.email;
+      } else {
+        loginForm.classList.remove('hidden');
+        userInfo.classList.add('hidden');
+        adminFormCard.classList.add('hidden');
+        actionsHeader.classList.add('hidden');
+        userEmailBadge.textContent = '';
+      }
+      renderTable();
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('authEmail').value;
+      const password = document.getElementById('authPassword').value;
+
+      const { error } = await db.auth.signInWithPassword({ email, password });
+      if (error) alert('Login failed: ' + error.message);
+      else loginForm.reset();
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await db.auth.signOut();
     });
 
     async function fetchEntries() {
@@ -179,6 +239,8 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
+      if (!currentUser) return alert('You must be logged in to perform this action.');
+
       const id = document.getElementById('linkId').value;
       const payload = {
         title: document.getElementById('title').value,
@@ -191,11 +253,9 @@
       };
 
       if (id) {
-        // UPDATE existing record
         const { error } = await db.from('links').update(payload).eq('id', id);
         if (error) return alert('Failed to update: ' + error.message);
       } else {
-        // INSERT new record
         const { error } = await db.from('links').insert([payload]);
         if (error) return alert('Failed to save: ' + error.message);
       }
@@ -223,6 +283,7 @@
     }
 
     async function deleteEntry(id) {
+      if (!currentUser) return alert('You must be logged in to delete entries.');
       if (confirm('Are you sure you want to delete this link?')) {
         const { error } = await db.from('links').delete().eq('id', id);
         if (error) return alert('Failed to delete: ' + error.message);
@@ -282,10 +343,12 @@
           <td>${escapeHtml(item.type)}</td>
           <td>${escapeHtml(item.comments)}</td>
           <td><small>${new Date(item.created_at).toLocaleDateString()}</small></td>
-          <td class="actions-cell">
-            <button class="btn btn-warning" onclick="editEntry('${item.id}')">Edit</button>
-            <button class="btn btn-danger" onclick="deleteEntry('${item.id}')">Delete</button>
-          </td>
+          ${currentUser ? `
+            <td class="actions-cell">
+              <button class="btn btn-warning" onclick="editEntry('${item.id}')">Edit</button>
+              <button class="btn btn-danger" onclick="deleteEntry('${item.id}')">Delete</button>
+            </td>
+          ` : ''}
         </tr>
       `).join('');
     }
