@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>URL Links Manager</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -17,10 +17,12 @@
       --radius: 8px;
     }
 
-    /* Prevent horizontal viewport overflow */
+    /* Absolute lock against horizontal scrolling */
     html, body {
-      max-width: 100vw;
-      overflow-x: hidden;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden !important;
+      position: relative;
     }
 
     * { 
@@ -28,11 +30,10 @@
       margin: 0; 
       padding: 0; 
       font-family: system-ui, -apple-system, sans-serif;
-      max-width: 100%;
     }
 
     body { background-color: var(--bg-color); color: var(--text-main); padding: 1rem; line-height: 1.5; }
-    .container { max-width: 1200px; margin: 0 auto; }
+    .container { max-width: 1200px; margin: 0 auto; width: 100%; }
     
     header { 
       margin-bottom: 1.5rem; 
@@ -51,6 +52,7 @@
       margin-bottom: 1.5rem; 
       border: 1px solid var(--border-color); 
       word-break: break-word;
+      width: 100%;
     }
     .card-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem; }
     
@@ -74,12 +76,12 @@
     .btn-danger { background-color: #fee2e2; color: #dc2626; }
     .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 
-    /* Contained horizontal scroll for tabs */
+    /* Category Tabs Container */
     .tabs-container { 
       display: flex; 
       gap: 0.4rem; 
       overflow-x: auto; 
-      max-width: 100%;
+      width: 100%;
       padding-bottom: 0.5rem; 
       margin-bottom: 1rem; 
       border-bottom: 2px solid var(--border-color); 
@@ -88,10 +90,10 @@
     .tab-btn { padding: 0.4rem 0.8rem; border: none; background: none; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: 4px; white-space: nowrap; }
     .tab-btn.active { background-color: var(--primary); color: var(--text-main); }
 
-    .controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem; }
-    .search-input { width: 100%; max-width: 100%; }
+    .controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem; align-items: center; }
+    .search-input { width: 100%; }
 
-    /* Responsive Mobile Grid */
+    /* Record Displays */
     .records-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; width: 100%; }
     .record-card { 
       background: var(--card-bg); 
@@ -114,12 +116,21 @@
     .tags-text { font-size: 0.75rem; color: var(--text-muted); font-style: italic; }
     
     .record-actions { display: flex; gap: 0.5rem; justify-content: flex-end; border-top: 1px solid var(--border-color); padding-top: 0.5rem; }
+    
+    /* Table View Styles */
+    .table-container { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+    th, td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color); }
+    th { background-color: #f8fafc; color: var(--text-muted); }
+
+    .view-toggle-btn { display: none; }
     .hidden { display: none !important; }
 
-    @media (min-width: 600px) {
+    @media (min-width: 768px) {
       body { padding: 2rem; }
       .search-input { max-width: 320px; }
       .auth-bar { width: auto; }
+      .view-toggle-btn { display: inline-block; }
     }
   </style>
 </head>
@@ -186,28 +197,36 @@
       </form>
     </div>
 
-    <!-- Password Reset Card -->
-    <div class="card hidden" id="resetPasswordCard" style="border: 2px solid var(--primary);">
-      <h2 class="card-title">Set New Password</h2>
-      <form id="resetPasswordForm">
-        <div class="form-group" style="margin-bottom: 0.75rem;">
-          <label for="newPassword">New Password *</label>
-          <input type="password" id="newPassword" required minlength="6" placeholder="Enter new password" />
-        </div>
-        <button type="submit" class="btn btn-primary">Update Password</button>
-      </form>
-    </div>
-
-    <!-- Directory Controls & Card Display -->
+    <!-- Directory Controls & Data Display -->
     <div class="card">
       <div class="tabs-container" id="tabsContainer"></div>
 
       <div class="controls">
         <input type="text" id="searchInput" class="search-input" placeholder="Search links..." />
-        <button class="btn btn-outline btn-sm" id="exportBtn">Export CSV</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-outline btn-sm view-toggle-btn" id="viewToggleBtn">Switch to Cards</button>
+          <button class="btn btn-outline btn-sm" id="exportBtn">Export CSV</button>
+        </div>
       </div>
 
       <div class="records-grid" id="recordsGrid"></div>
+      
+      <div class="table-container hidden" id="tableContainer">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Category</th>
+              <th>Author</th>
+              <th>Type</th>
+              <th>Comments</th>
+              <th>Date</th>
+              <th id="actionsHeader" class="hidden">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -222,26 +241,35 @@
     const userEmailBadge = document.getElementById('userEmailBadge');
     const logoutBtn = document.getElementById('logoutBtn');
     const adminFormCard = document.getElementById('adminFormCard');
+    const actionsHeader = document.getElementById('actionsHeader');
 
     const form = document.getElementById('urlForm');
     const searchInput = document.getElementById('searchInput');
     const recordsGrid = document.getElementById('recordsGrid');
+    const tableContainer = document.getElementById('tableContainer');
+    const tableBody = document.getElementById('tableBody');
     const tabsContainer = document.getElementById('tabsContainer');
     const exportBtn = document.getElementById('exportBtn');
+    const viewToggleBtn = document.getElementById('viewToggleBtn');
 
     let entries = [];
     let selectedCategory = 'All';
     let currentUser = null;
+    let currentView = window.innerWidth >= 768 ? 'table' : 'cards';
 
     document.addEventListener('DOMContentLoaded', async () => {
       const { data: { session } } = await db.auth.getSession();
       updateAuthUI(session?.user || null);
 
       db.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'PASSWORD_RECOVERY') {
-          document.getElementById('resetPasswordCard').classList.remove('hidden');
-        }
         updateAuthUI(session?.user || null);
+      });
+
+      window.addEventListener('resize', () => {
+        if (window.innerWidth < 768 && currentView === 'table') {
+          currentView = 'cards';
+          updateViewLayout();
+        }
       });
 
       await fetchEntries();
@@ -253,14 +281,16 @@
         loginForm.classList.add('hidden');
         userInfo.classList.remove('hidden');
         adminFormCard.classList.remove('hidden');
+        actionsHeader.classList.remove('hidden');
         userEmailBadge.textContent = currentUser.email;
       } else {
         loginForm.classList.remove('hidden');
         userInfo.classList.add('hidden');
         adminFormCard.classList.add('hidden');
+        actionsHeader.classList.add('hidden');
         userEmailBadge.textContent = '';
       }
-      renderCards();
+      renderDisplay();
     }
 
     loginForm.addEventListener('submit', async (e) => {
@@ -277,18 +307,6 @@
       await db.auth.signOut();
     });
 
-    document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const newPassword = document.getElementById('newPassword').value;
-      const { error } = await db.auth.updateUser({ password: newPassword });
-
-      if (error) alert('Error updating password: ' + error.message);
-      else {
-        alert('Password updated successfully!');
-        document.getElementById('resetPasswordCard').classList.add('hidden');
-      }
-    });
-
     async function fetchEntries() {
       const { data, error } = await db
         .from('links')
@@ -302,10 +320,9 @@
 
       entries = data || [];
       renderTabs();
-      renderCards();
+      renderDisplay();
     }
 
-    // Auto-formats URL string if missing protocol
     function formatUrl(urlStr) {
       let cleaned = (urlStr || '').trim();
       if (cleaned && !cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
@@ -389,10 +406,29 @@
     function setCategory(cat) {
       selectedCategory = cat;
       renderTabs();
-      renderCards();
+      renderDisplay();
     }
 
-    function renderCards() {
+    viewToggleBtn.addEventListener('click', () => {
+      currentView = currentView === 'table' ? 'cards' : 'table';
+      updateViewLayout();
+      renderDisplay();
+    });
+
+    function updateViewLayout() {
+      if (currentView === 'table' && window.innerWidth >= 768) {
+        recordsGrid.classList.add('hidden');
+        tableContainer.classList.remove('hidden');
+        viewToggleBtn.textContent = 'Switch to Cards';
+      } else {
+        recordsGrid.classList.remove('hidden');
+        tableContainer.classList.add('hidden');
+        viewToggleBtn.textContent = 'Switch to Table';
+      }
+    }
+
+    function renderDisplay() {
+      updateViewLayout();
       const query = searchInput.value.toLowerCase();
 
       const filtered = entries.filter(item => {
@@ -408,9 +444,11 @@
 
       if (filtered.length === 0) {
         recordsGrid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 2rem;">No entries found.</div>`;
+        tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No entries found.</td></tr>`;
         return;
       }
 
+      // Render Cards
       recordsGrid.innerHTML = filtered.map(item => `
         <div class="record-card">
           <div>
@@ -437,9 +475,27 @@
           ` : ''}
         </div>
       `).join('');
+
+      // Render Table
+      tableBody.innerHTML = filtered.map(item => `
+        <tr>
+          <td><a href="${escapeHtml(item.url)}" target="_blank" class="record-title">${escapeHtml(item.title)} ↗</a></td>
+          <td><span class="badge">${escapeHtml(item.category)}</span></td>
+          <td>${escapeHtml(item.author)}</td>
+          <td>${escapeHtml(item.type)}</td>
+          <td>${escapeHtml(item.comments)}</td>
+          <td><small>${new Date(item.created_at).toLocaleDateString()}</small></td>
+          ${currentUser ? `
+            <td class="record-actions">
+              <button class="btn btn-warning btn-sm" onclick="editEntry('${item.id}')">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteEntry('${item.id}')">Delete</button>
+            </td>
+          ` : ''}
+        </tr>
+      `).join('');
     }
 
-    searchInput.addEventListener('input', renderCards);
+    searchInput.addEventListener('input', renderDisplay);
 
     exportBtn.addEventListener('click', () => {
       if (entries.length === 0) return alert('No data available to export.');
