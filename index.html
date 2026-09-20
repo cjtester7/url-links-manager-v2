@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>URL Links Manager (v11)</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>URL Links Manager (v11.1 - Firebase)</title>
   <style>
     :root {
       --bg-color: #f8fafc;
@@ -168,18 +167,17 @@
             <input type="text" id="url" required placeholder="example.com or https://example.com" />
           </div>
           
-          <!-- Dropdowns with Custom Add Built In -->
           <div class="form-group">
             <label for="category">Category</label>
-            <select id="category" onchange="handleDropdownChange(this, 'Category')"></select>
+            <select id="category"></select>
           </div>
           <div class="form-group">
             <label for="author">Author</label>
-            <select id="author" onchange="handleDropdownChange(this, 'Author')"></select>
+            <select id="author"></select>
           </div>
           <div class="form-group">
             <label for="type">Type / Format</label>
-            <select id="type" onchange="handleDropdownChange(this, 'Type')"></select>
+            <select id="type"></select>
           </div>
 
           <div class="form-group">
@@ -193,7 +191,7 @@
         </div>
 
         <div class="btn-group">
-          <button type="button" class="btn btn-secondary" onclick="resetForm()">Reset</button>
+          <button type="button" class="btn btn-secondary" id="resetBtn">Reset</button>
           <button type="submit" class="btn btn-primary" id="saveBtn">Save Link</button>
         </div>
       </form>
@@ -232,11 +230,40 @@
     </div>
   </div>
 
-  <script>
-    const SUPABASE_URL = 'https://eawbipagcuiqscpxibop.supabase.co';
-    const SUPABASE_KEY = 'YOUR_ACTUAL_ANON_KEY_HERE'; // Replace with your anon key
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithEmailAndPassword, 
+      signOut, 
+      onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      updateDoc, 
+      deleteDoc, 
+      doc, 
+      onSnapshot, 
+      query, 
+      orderBy, 
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCpmT0QV-nza9l8OoQp0i0WzGhHhKAEpdA",
+  authDomain: "links-929ca.firebaseapp.com",
+  projectId: "links-929ca",
+  storageBucket: "links-929ca.firebasestorage.app",
+  messagingSenderId: "710876746941",
+  appId: "1:710876746941:web:beca5b8f33a092b35993d4"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
     const loginForm = document.getElementById('loginForm');
     const userInfo = document.getElementById('userInfo');
@@ -246,6 +273,7 @@
     const actionsHeader = document.getElementById('actionsHeader');
 
     const form = document.getElementById('urlForm');
+    const resetBtn = document.getElementById('resetBtn');
     const searchInput = document.getElementById('searchInput');
     const recordsGrid = document.getElementById('recordsGrid');
     const tableContainer = document.getElementById('tableContainer');
@@ -259,36 +287,19 @@
     let currentUser = null;
     let currentView = window.innerWidth >= 768 ? 'table' : 'cards';
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        const { data: { session } } = await db.auth.getSession();
-        updateAuthUI(session?.user || null);
-      } catch (err) {
-        console.warn('Session error:', err);
-      }
-
-      db.auth.onAuthStateChange(async (event, session) => {
-        updateAuthUI(session?.user || null);
-      });
-
-      window.addEventListener('resize', () => {
-        if (window.innerWidth < 768 && currentView === 'table') {
-          currentView = 'cards';
-          updateViewLayout();
-        }
-      });
-
-      await fetchEntries();
+    // Auth State Tracking
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      updateAuthUI(user);
     });
 
     function updateAuthUI(user) {
-      currentUser = user;
-      if (currentUser) {
+      if (user) {
         loginForm.classList.add('hidden');
         userInfo.classList.remove('hidden');
         adminFormCard.classList.remove('hidden');
         actionsHeader.classList.remove('hidden');
-        userEmailBadge.textContent = currentUser.email;
+        userEmailBadge.textContent = user.email;
       } else {
         loginForm.classList.remove('hidden');
         userInfo.classList.add('hidden');
@@ -304,30 +315,33 @@
       const email = document.getElementById('authEmail').value;
       const password = document.getElementById('authPassword').value;
 
-      const { error } = await db.auth.signInWithPassword({ email, password });
-      if (error) alert('Login failed: ' + error.message);
-      else loginForm.reset();
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        loginForm.reset();
+      } catch (error) {
+        alert('Login failed: ' + error.message);
+      }
     });
 
     logoutBtn.addEventListener('click', async () => {
-      await db.auth.signOut();
+      await signOut(auth);
     });
 
-    async function fetchEntries() {
-      const { data, error } = await db
-        .from('links')
-        .select('*')
-        .order('created_at', { ascending: false });
+    // Real-time Firestore Listener
+    const q = query(collection(db, "links"), orderBy("created_at", "desc"));
+    onSnapshot(q, (snapshot) => {
+      entries = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        created_at: doc.data().created_at?.toDate().toISOString() || new Date().toISOString()
+      }));
 
-      if (error) {
-        console.error('Error fetching data:', error);
-      }
-
-      entries = data || [];
       renderTabs();
       populateDropdowns();
       renderDisplay();
-    }
+    }, (error) => {
+      console.error("Firestore real-time subscription error:", error);
+    });
 
     function populateDropdowns() {
       const existingCategories = [...new Set(entries.map(e => e.category).filter(Boolean))];
@@ -353,7 +367,7 @@
       html += `<option value="__ADD_NEW__">➕ Add New...</option>`;
       selectEl.innerHTML = html;
 
-      if (currentVal && Array.from(selectEl.options).some(o => o.value === currentVal)) {
+      if (currentVal) {
         selectEl.value = currentVal;
       }
     }
@@ -363,14 +377,20 @@
         const newVal = prompt(`Enter new ${labelName}:`);
         if (newVal && newVal.trim() !== '') {
           const cleanVal = newVal.trim();
-          const newOption = new Option(cleanVal, cleanVal, true, true);
-          selectEl.add(newOption, selectEl.options[selectEl.options.length - 1]);
+          const newOption = document.createElement('option');
+          newOption.value = cleanVal;
+          newOption.textContent = cleanVal;
+          selectEl.insertBefore(newOption, selectEl.lastElementChild);
           selectEl.value = cleanVal;
         } else {
           selectEl.selectedIndex = 0;
         }
       }
     }
+
+    document.getElementById('category').addEventListener('change', (e) => handleDropdownChange(e.target, 'Category'));
+    document.getElementById('author').addEventListener('change', (e) => handleDropdownChange(e.target, 'Author'));
+    document.getElementById('type').addEventListener('change', (e) => handleDropdownChange(e.target, 'Type'));
 
     function formatUrl(urlStr) {
       let cleaned = (urlStr || '').trim();
@@ -397,19 +417,20 @@
         comments: document.getElementById('comments').value || ''
       };
 
-      if (id) {
-        const { error } = await db.from('links').update(payload).eq('id', id);
-        if (error) return alert('Failed to update: ' + error.message);
-      } else {
-        const { error } = await db.from('links').insert([payload]);
-        if (error) return alert('Failed to save: ' + error.message);
+      try {
+        if (id) {
+          await updateDoc(doc(db, "links", id), payload);
+        } else {
+          payload.created_at = serverTimestamp();
+          await addDoc(collection(db, "links"), payload);
+        }
+        resetForm();
+      } catch (error) {
+        alert('Failed to save link: ' + error.message);
       }
-
-      resetForm();
-      await fetchEntries();
     });
 
-    function editEntry(id) {
+    window.editEntry = function(id) {
       const item = entries.find(e => e.id === id);
       if (!item) return;
 
@@ -427,27 +448,31 @@
       document.getElementById('formTitle').textContent = 'Edit Link';
       document.getElementById('saveBtn').textContent = 'Update Link';
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    };
 
     function setSelectValue(elementId, val) {
       const select = document.getElementById(elementId);
       if (!select) return;
       let optionExists = Array.from(select.options).some(o => o.value === val);
       if (!optionExists) {
-        const newOpt = new Option(val, val, true, true);
-        select.add(newOpt, select.options[select.options.length - 1]);
+        const newOpt = document.createElement('option');
+        newOpt.value = val;
+        newOpt.textContent = val;
+        select.insertBefore(newOpt, select.lastElementChild);
       }
       select.value = val;
     }
 
-    async function deleteEntry(id) {
+    window.deleteEntry = async function(id) {
       if (!currentUser) return alert('You must be logged in.');
       if (confirm('Delete this link?')) {
-        const { error } = await db.from('links').delete().eq('id', id);
-        if (error) return alert('Failed to delete: ' + error.message);
-        await fetchEntries();
+        try {
+          await deleteDoc(doc(db, "links", id));
+        } catch (error) {
+          alert('Failed to delete link: ' + error.message);
+        }
       }
-    }
+    };
 
     function resetForm() {
       form.reset();
@@ -456,13 +481,19 @@
       document.getElementById('saveBtn').textContent = 'Save Link';
     }
 
+    resetBtn.addEventListener('click', resetForm);
+
     function renderTabs() {
       const categories = ['All', ...new Set(entries.map(e => e.category || 'Uncategorized'))];
       tabsContainer.innerHTML = categories.map(cat => `
-        <button class="tab-btn ${cat === selectedCategory ? 'active' : ''}" onclick="setCategory('${escapeHtml(cat)}')">
+        <button class="tab-btn ${cat === selectedCategory ? 'active' : ''}" data-cat="${escapeHtml(cat)}">
           ${escapeHtml(cat)}
         </button>
       `).join('');
+
+      tabsContainer.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => setCategory(btn.dataset.cat));
+      });
     }
 
     function setCategory(cat) {
@@ -475,6 +506,13 @@
       currentView = currentView === 'table' ? 'cards' : 'table';
       updateViewLayout();
       renderDisplay();
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth < 768 && currentView === 'table') {
+        currentView = 'cards';
+        updateViewLayout();
+      }
     });
 
     function updateViewLayout() {
@@ -491,15 +529,15 @@
 
     function renderDisplay() {
       updateViewLayout();
-      const query = searchInput.value.toLowerCase();
+      const queryStr = searchInput.value.toLowerCase();
 
       const filtered = entries.filter(item => {
         const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
         const matchesSearch = 
-          (item.title || '').toLowerCase().includes(query) ||
-          (item.url || '').toLowerCase().includes(query) ||
-          (item.tags || '').toLowerCase().includes(query) ||
-          (item.comments || '').toLowerCase().includes(query);
+          (item.title || '').toLowerCase().includes(queryStr) ||
+          (item.url || '').toLowerCase().includes(queryStr) ||
+          (item.tags || '').toLowerCase().includes(queryStr) ||
+          (item.comments || '').toLowerCase().includes(queryStr);
 
         return matchesCategory && matchesSearch;
       });
@@ -510,7 +548,7 @@
         return;
       }
 
-      // Render Cards
+      // Render Cards View
       recordsGrid.innerHTML = filtered.map(item => `
         <div class="record-card">
           <div>
@@ -538,7 +576,7 @@
         </div>
       `).join('');
 
-      // Render Table
+      // Render Table View
       tableBody.innerHTML = filtered.map(item => `
         <tr>
           <td><a href="${escapeHtml(item.url)}" target="_blank" class="record-title">${escapeHtml(item.title)} ↗</a></td>
